@@ -29,8 +29,17 @@ st.markdown("""
 # 1. Titel
 st.title("📷 F-Art Fotobespreking")
 
-# Zijbalk voor OpenAI API Key
-api_key = st.sidebar.text_input("OpenAI API Key:", value="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", type="password")
+# NIEUWE REGEL (crasht nooit meer, zelfs niet als het bestand ontbreekt):
+try:
+    default_api_key = st.secrets["OPENAI_API_KEY"]
+except Exception:
+    default_api_key = ""
+
+api_key = st.sidebar.text_input(
+    "OpenAI API Key:", 
+    value=default_api_key, 
+    type="password"
+)
 
 # 2. Veld om een foto klaar te zetten (ondersteunt ook slepen / drag-and-drop)
 st.subheader("1. Foto selecteren")
