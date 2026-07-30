@@ -3,18 +3,35 @@ import io
 import os
 import re
 import tempfile
-from fpdf import FPDF
 from openai import OpenAI
+from fpdf import FPDF
 from PIL import Image
 import streamlit as st
-from PIL import Image
+
+# ---------------------------------------------------------
+# 1. ZIJBALLIK: API-key veilig opvragen aan de gebruiker
+# ---------------------------------------------------------
+st.sidebar.title("Instellingen")
+user_api_key = st.sidebar.text_input(
+    "Vul hier je OpenAI API-key in:", 
+    type="password", 
+    help="Je vindt je sleutel op platform.openai.com"
+)
+
+# Controleer of de gebruiker de sleutel heeft ingevuld
+if not user_api_key:
+    st.info("👈 Voer eerst je OpenAI API-key in aan de linkerkant om de app te starten.")
+    st.stop()  # De app stopt hier netjes totdat er een sleutel is ingevuld
+
+# 2. Start de OpenAI client met de ingevoerde sleutel
+client = OpenAI(api_key=user_api_key)
 
 if "huidig_scherm" not in st.session_state:
     st.session_state["huidig_scherm"] = "HOME"
 
 
 # =====================================================================
-# 1. PAGINA CONFIGURATIE & CSS
+# 1. PAGINA CONFIGURATIE - CSS - PDF ==================================
 # =====================================================================
 
 
@@ -327,7 +344,7 @@ def maak_pdf_van_verslag(tekst, titel, bytes_image, score=70):
     return bestandspad
 
 # =====================================================================
-# 4. SCHERM: HOME (STARTSCHERM ENKEL EN ALLEEN BINNEN HET IF-BLOK)
+# 4. SCHERM: HOME - STARTSCHERM =======================================
 # =====================================================================
 if st.session_state["huidig_scherm"] == "HOME":
     st.title("F-Art Fotoclub - AI Beoordeling")
@@ -421,7 +438,7 @@ Kies uit een van de drie onderstaande opties om direct aan de slag te gaan:\n\n
     st.stop()
 
 # =====================================================================
-# 5. SCHERM: SCHERM_B1 (CURATOR-SELECTIE - 4 TOT 25 FOTO'S)
+# 5. SCHERM: CURATOR-SELECTIE - 4 TOT 25 FOTO'S =======================
 # =====================================================================
 if st.session_state["huidig_scherm"] == "SCHERM_B1":
     st.title("F-Art Fotoclub - Curator")
@@ -632,7 +649,7 @@ Korte samenvatting van de kwaliteit van de ingezonden serie en de sterkte van he
 
 
 # =====================================================================
-# 6. SCHERM: SCHERM_B2 (REEKS-ANALYSE - 4 TOT 25 FOTO'S)
+# 6. SCHERM: REEKS-ANALYSE - 4 TOT 25 FOTO'S ==========================
 # =====================================================================
 if st.session_state["huidig_scherm"] == "SCHERM_B2":
     st.title("F-Art Fotoclub - Reeks-Analyse")
@@ -828,7 +845,7 @@ EINDSCORE REEKS: [getal]
     st.stop()
 
 # =====================================================================
-# 7. SCHERM: SCHERM_A (INDIVIDUELE FOTOBEOORDELING)
+# 7. SCHERM: INDIVIDUELE FOTOBEOORDELING - 1 tot 4 foto's =============
 # =====================================================================
 st.title("📷 F-Art Fotoclub")
 if st.button("Terug naar Startscherm", type="secondary"):
