@@ -219,8 +219,17 @@ def geef_beoordeling_details(score):
         )
 
 
+#=====================================================================
+# 3B PDF =============================================================
+# ====================================================================
+
+import os
+import tempfile
+from fpdf import FPDF
+
+
 def maak_veilige_tekst(tekst):
-    """Vervangt speciale Unicode-tekens door FPDF-veilige karakters."""
+    """Vervangt speciale Unicode-tekens en emoji's door FPDF-veilige karakters."""
     if not tekst:
         return ""
 
@@ -239,6 +248,19 @@ def maak_veilige_tekst(tekst):
         "é": "e",
         "ë": "e",
         "è": "e",
+        "ê": "e",
+        "á": "a",
+        "ä": "a",
+        "à": "a",
+        "ó": "o",
+        "ö": "o",
+        "ò": "o",
+        "ú": "u",
+        "ü": "u",
+        "ù": "u",
+        "⭐": "*",
+        "★": "*",
+        "☆": "",
     }
 
     for oud, nieuw in vervangingen.items():
@@ -247,43 +269,51 @@ def maak_veilige_tekst(tekst):
     return tekst.encode("latin-1", "replace").decode("latin-1")
 
 
+def forceer_regelbreking(tekst, max_lengte=40):
+    """Splitst extreem lange woorden zodat FPDF ze niet buiten de marge drukt."""
+    woorden = tekst.split(" ")
+    nieuwe_woorden = []
+
+    for woord in woorden:
+        if len(woord) > max_lengte:
+            stukken = [
+                woord[i : i + max_lengte]
+                for i in range(0, len(woord), max_lengte)
+            ]
+            nieuwe_woorden.extend(stukken)
+        else:
+            nieuwe_woorden.append(woord)
+
+    return " ".join(nieuwe_woorden)
+
 def maak_pdf_van_verslag(tekst, titel, bytes_image, score=70):
-    """Genereert een downloadbaar PDF-juryrapport met afbeelding en opgemaakte tekst."""
+    """Genereert een downloadbaar PDF-juryrapport met een kleine afbeelding en stabiele tekstopmaak."""
     sterren, interpretatie = geef_beoordeling_details(score)
 
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
+    # Bereken de effectieve breedte handmatig (Paginabreedte min linker- en rechtermarge)
+    epw = pdf.w - pdf.l_margin - pdf.r_margin
+
     # 1. Titel
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, maak_veilige_tekst(titel), ln=True, align="C")
+    pdf.multi_cell(w=epw, h=10, txt=maak_veilige_tekst(titel), align="C")
     pdf.ln(2)
 
     # 2. Score & Interpretatie
     schone_sterren = sterren.replace("★", "*").replace("☆", "")
-    pdf.set_font("Arial", "B", 13)
-    pdf.cell(
-        0,
-        8,
-        maak_veilige_tekst(
-            f"Eindscore: {score}/100 - Beoordeling: {schone_sterren}"
-        ),
-        ln=True,
-        align="C",
-    )
+    pdf.set_font("Arial", "B", 12)
+    score_tekst = f"Eindscore: {score}/100 - Beoordeling: {schone_sterren}"
+    pdf.multi_cell(w=epw, h=7, txt=maak_veilige_tekst(score_tekst), align="C")
 
     pdf.set_font("Arial", "I", 10)
-    pdf.cell(
-        0,
-        6,
-        maak_veilige_tekst(f"Interpretatie: {interpretatie}"),
-        ln=True,
-        align="C",
-    )
-    pdf.ln(5)
+    interp_tekst = f"Interpretatie: {interpretatie}"
+    pdf.multi_cell(w=epw, h=6, txt=maak_veilige_tekst(interp_tekst), align="C")
+    pdf.ln(4)
 
-    # 3. Afbeelding invoegen
+    # 3. Afbeelding invoegen (KLEIN FORMAAT: w=45 mm)
     if bytes_image:
         try:
             with tempfile.NamedTemporaryFile(
@@ -292,8 +322,9 @@ def maak_pdf_van_verslag(tekst, titel, bytes_image, score=70):
                 tmp_file.write(bytes_image)
                 tmp_path = tmp_file.name
 
-            pdf.image(tmp_path, x=45, w=120)
-            pdf.ln(8)
+            # Foto strak instellen op 45 mm breedte
+            pdf.image(tmp_path, w=45)
+            pdf.ln(4)
         except Exception as e:
             print(
                 f"Waarschuwing: Afbeelding kon niet in PDF geplaatst worden: {e}"
@@ -302,7 +333,7 @@ def maak_pdf_van_verslag(tekst, titel, bytes_image, score=70):
             if "tmp_path" in locals() and os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-    # 4. Inhoudsopmaak
+    # 4. Inhoudsopmaak & Broodtekst
     regels = tekst.split("\n")
 
     for regel in regels:
@@ -311,9 +342,9 @@ def maak_pdf_van_verslag(tekst, titel, bytes_image, score=70):
             pdf.ln(3)
             continue
 
-        safe_regel = maak_veilige_tekst(regel)
+        safe_regel = forceer_regelbreking(maak_veilige_tekst(regel))
 
-        # Kopjes
+        # Kopjes (Markdown # of **kop**)
         if safe_regel.startswith("#") or (
             safe_regel.startswith("**") and safe_regel.endswith("**")
         ):
@@ -322,26 +353,28 @@ def maak_pdf_van_verslag(tekst, titel, bytes_image, score=70):
             )
             pdf.set_font("Arial", "B", 11)
             pdf.ln(2)
-            pdf.multi_cell(0, 6, schone_regel)
+            pdf.multi_cell(w=epw, h=6, txt=schone_regel)
             pdf.set_font("Arial", "", 10)
 
-        # Opsommingen
+        # Opsommingen (- of *)
         elif safe_regel.startswith("- ") or safe_regel.startswith("* "):
             schone_regel = (
                 "- " + safe_regel[2:].replace("**", "").replace("*", "")
             )
             pdf.set_font("Arial", "", 10)
-            pdf.multi_cell(0, 5, "   " + schone_regel)
+            pdf.multi_cell(w=epw, h=5, txt="   " + schone_regel)
 
-        # Broodtekst
+        # Standaard tekst
         else:
             schone_regel = safe_regel.replace("**", "").replace("*", "")
             pdf.set_font("Arial", "", 10)
-            pdf.multi_cell(0, 5, schone_regel)
+            pdf.multi_cell(w=epw, h=5, txt=schone_regel)
 
     bestandspad = "jury_rapport_temp.pdf"
     pdf.output(bestandspad)
     return bestandspad
+
+
 
 # =====================================================================
 # 4. SCHERM: HOME - STARTSCHERM =======================================
